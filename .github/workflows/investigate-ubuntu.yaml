@@ -38,11 +38,14 @@ jobs:
           useradd -g sshd -c 'sshd privsep' -d /var/empty -s /bin/false sshd
 
       - name: Clone liboqs at requested ref
+        shell: bash
         run: |
           set -exo pipefail
           rm -rf oqs-scripts/tmp && mkdir -p oqs-scripts/tmp
+          # Full history so arbitrary SHAs/tags resolve (partial clone still OK).
           git clone --filter=blob:none "${LIBOQS_REPO}" oqs-scripts/tmp/liboqs
-          git -C oqs-scripts/tmp/liboqs checkout --detach "${LIBOQS_REF}"
+          git -C oqs-scripts/tmp/liboqs fetch --filter=blob:none origin "${LIBOQS_REF}"
+          git -C oqs-scripts/tmp/liboqs checkout --detach FETCH_HEAD
           echo "liboqs HEAD=$(git -C oqs-scripts/tmp/liboqs rev-parse HEAD)"
           echo "liboqs subject=$(git -C oqs-scripts/tmp/liboqs log -1 --oneline)"
 
