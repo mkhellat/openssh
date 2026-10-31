@@ -1,0 +1,60 @@
+# Fork-only helper: reproduce CI Checks / rekey failures without touching
+# open-quantum-safe/openssh PR runners. Trigger via workflow_dispatch only.
+#
+# Does not run on pull_request. Safe to keep on the fork investigation branch.
+name: Investigate Ubuntu (fork)
+on:
+  workflow_dispatch:
+    inputs:
+      liboqs_ref:
+        description: "liboqs git ref (branch, tag, or full SHA)"
+        required: true
+        default: "main"
+      liboqs_repo:
+        description: "liboqs clone URL"
+        required: true
+        default: "https://github.com/open-quantum-safe/liboqs.git"
+      run_connection_smoke:
+        description: "Also run try_connection.py doone"
+        type: boolean
+        default: true
+
+jobs:
+  ubuntu_build:
+    runs-on: ubuntu-latest
+    container:
+      # Same floating tag CI Checks uses today (pin later if needed).
+      image: openquantumsafe/ci-ubuntu-jammy:latest
+    env:
+      LIBOQS_REPO: ${{ inputs.liboqs_repo }}
+      LIBOQS_REF: ${{ inputs.liboqs_ref }}
+    steps:
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
+
+      - name: Set up SSH environment
+        run: |
+          mkdir -p -m 0755 /var/empty
+          groupadd sshd
+          useradd -g sshd -c 'sshd privsep' -d /var/empty -s /bin/false sshd
+
+      - name: Clone liboqs at requested ref
+        run: |
+          set -exo pipefail
+          rm -rf oqs-scripts/tmp && mkdir -p oqs-scripts/tmp
+          git clone --filter=blob:none "${LIBOQS_REPO}" oqs-scripts/tmp/liboqs
+          git -C oqs-scripts/tmp/liboqs checkout --detach "${LIBOQS_REF}"
+          echo "liboqs HEAD=$(git -C oqs-scripts/tmp/liboqs rev-parse HEAD)"
+          echo "liboqs subject=$(git -C oqs-scripts/tmp/liboqs log -1 --oneline)"
+
+      - name: Build liboqs
+        run: ./oqs-scripts/build_liboqs.sh
+
+      - name: Build OpenSSH
+        run: env WITH_OPENSSL=true ./oqs-scripts/build_openssh.sh
+
+      - name: Run tests documented to pass
+        run: ./oqs-test/run_tests.sh
+
+      - name: Connection smoke (optional)
+        if: ${{ inputs.run_connection_smoke }}
+        run: python3 oqs-test/try_connection.py doone
