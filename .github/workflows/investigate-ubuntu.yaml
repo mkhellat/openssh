@@ -1,7 +1,9 @@
-# Fork-only helper: reproduce CI Checks / rekey failures without touching
-# open-quantum-safe/openssh PR runners. Trigger via workflow_dispatch only.
+# Fork-only helper: reproduce the *failing* regress slice without the full
+# CI Checks suite. Trigger via workflow_dispatch only (no pull_request).
 #
-# Does not run on pull_request. Safe to keep on the fork investigation branch.
+# Upstream PR failures died in regress `rekey` (ssh failed / Broken pipe),
+# especially Classic McEliece KEX. This workflow builds once, then runs only
+# the requested LTESTS (default: rekey).
 name: Investigate Ubuntu (fork)
 on:
   workflow_dispatch:
@@ -14,20 +16,20 @@ on:
         description: "liboqs clone URL"
         required: true
         default: "https://github.com/open-quantum-safe/liboqs.git"
-      run_connection_smoke:
-        description: "Also run try_connection.py doone"
-        type: boolean
-        default: true
+      ltests:
+        description: "Space-separated regress LTESTS names (not full run_tests.sh)"
+        required: true
+        default: "rekey"
 
 jobs:
-  ubuntu_build:
+  ubuntu_rekey:
     runs-on: ubuntu-latest
     container:
-      # Same floating tag CI Checks uses today (pin later if needed).
       image: openquantumsafe/ci-ubuntu-jammy:latest
     env:
       LIBOQS_REPO: ${{ inputs.liboqs_repo }}
       LIBOQS_REF: ${{ inputs.liboqs_ref }}
+      LTESTS: ${{ inputs.ltests }}
     steps:
       - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # pin@v4
 
@@ -42,7 +44,6 @@ jobs:
         run: |
           set -exo pipefail
           rm -rf oqs-scripts/tmp && mkdir -p oqs-scripts/tmp
-          # Full history so arbitrary SHAs/tags resolve (partial clone still OK).
           git clone --filter=blob:none "${LIBOQS_REPO}" oqs-scripts/tmp/liboqs
           git -C oqs-scripts/tmp/liboqs fetch --filter=blob:none origin "${LIBOQS_REF}"
           git -C oqs-scripts/tmp/liboqs checkout --detach FETCH_HEAD
@@ -55,9 +56,10 @@ jobs:
       - name: Build OpenSSH
         run: env WITH_OPENSSL=true ./oqs-scripts/build_openssh.sh
 
-      - name: Run tests documented to pass
-        run: ./oqs-test/run_tests.sh
-
-      - name: Connection smoke (optional)
-        if: ${{ inputs.run_connection_smoke }}
-        run: python3 oqs-test/try_connection.py doone
+      - name: Run only requested regress LTESTS
+        shell: bash
+        run: |
+          set -exo pipefail
+          echo "Running LTESTS='${LTESTS}' only (not oqs-test/run_tests.sh full suite)"
+          # t-exec pulls regress-prep/binaries; LTESTS overrides the full list.
+          make t-exec -e LTESTS="${LTESTS}"
