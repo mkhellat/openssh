@@ -147,18 +147,18 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE
         /sbin/chown -R builder .
-        sudo -u builder bash ./oqs-scripts/clone_liboqs.sh
+        # FORK VERIFY ONLY: pin patched liboqs (QRUOV NetBSD explicit_memset).
+        # Do not merge this pin upstream — real fix belongs in liboqs.
+        sudo -u builder env \
+          LIBOQS_REPO=https://github.com/mkhellat/liboqs.git \
+          LIBOQS_BRANCH=fix/qruov-netbsd-explicit-memset \
+          bash ./oqs-scripts/clone_liboqs.sh
     - name: Build liboqs
       shell: netbsd {0}
       run: |
         cd $GITHUB_WORKSPACE
         /sbin/chown -R builder .
-        # Skip liboqs tests: QRUOV util.h calls explicit_bzero under __NetBSD__,
-        # but NetBSD provides explicit_memset (not explicit_bzero), so linking
-        # liboqs test binaries fails. OpenBSD already uses OQS_BUILD_ONLY_LIB.
-        # Real fix belongs in liboqs; this matches the OpenBSD consumer workaround.
-        sudo -u builder env LIBOQS_CMAKE_ARGS="-DOQS_BUILD_ONLY_LIB=ON" \
-          bash ./oqs-scripts/build_liboqs.sh
+        sudo -u builder bash ./oqs-scripts/build_liboqs.sh
     - name: Build OpenSSH
       shell: netbsd {0}
       run: |
