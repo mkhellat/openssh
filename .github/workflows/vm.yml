@@ -147,7 +147,11 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE
         /sbin/chown -R builder .
-        sudo -u builder bash ./oqs-scripts/clone_liboqs.sh
+        # FORK VERIFY ONLY: #206 + liboqs #2683. Do not merge this pin.
+        sudo -u builder env \
+          LIBOQS_REPO=https://github.com/mkhellat/liboqs.git \
+          LIBOQS_BRANCH=fix/qruov-netbsd-explicit-memset \
+          bash ./oqs-scripts/clone_liboqs.sh
     - name: Build liboqs
       shell: netbsd {0}
       run: |
